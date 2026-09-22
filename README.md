@@ -7,15 +7,19 @@ overlay** that reads the last few days of headlines and filings.
 Nothing here needs an API key except the optional DeepSeek overlay and the optional Tushare adapter
 (this repo was built and run without a Tushare token, see [Data sources](#data-sources)).
 
-**Headline result** — 218 out-of-sample trading days (2025-10-28 → 2026-09-22), 4 assets, horizon
-H = 5 days, lookback L = 30 days:
+**Headline result** — 4 assets, horizon H = 5 days, lookback L = 30 days, out-of-sample 2025-10-28 →
+2026-09-22 (218 windows, cross-sector group):
 
-* the attention model is the best **directional** forecaster: **53.0 %** sign accuracy vs 50.3 %
-  (momentum) and 45.6 % (trailing mean);
-* **no learned model beats predicting zero on MAE** (2.47 % vs 2.92 %). That is the expected
-  outcome for daily returns — the loss-minimising forecast of the conditional mean is a shrink
-  toward zero — which is exactly why this repo reports *both* metric families instead of only the
-  flattering one.
+* **No learned model beats predicting zero on MAE** (2.47 % vs 2.92 %). That is the expected outcome
+  for daily returns — the loss-minimising forecast of the conditional mean is a shrink toward zero —
+  which is why this repo reports *both* metric families instead of only the flattering one.
+* A single chronological split *suggests* the attention model is the best directional forecaster
+  (53.0 % vs 50.3 % momentum, 45.6 % trailing mean). **A 5-seed sweep collapses that claim**:
+  52.3 % ± 1.1 % for the attention model vs 51.4 % ± 0.6 % for the LSTM, i.e. the effect is the same
+  size as the seed variance; on the same-sector group the attention model falls to 48.7 % ± 5.7 %
+  while the LSTM reaches 51.7 % ± 2.7 %.
+* So the deliverable is **not** "attention beats the market" — it is a pipeline plus an evaluation
+  ladder honest enough to catch its own false positive. See [Seed sweep](#seed-sweep-are-the-results-real).
 
 ---
 
@@ -147,14 +151,63 @@ Run artefacts: [`reports/benchmark.md`](reports/benchmark.md) (generated), one
 * **MAE is a shrinkage metric.** Predicting 0 % every day wins, because daily log returns have a mean
   near zero and a large noise term. Any honest daily-return benchmark has to show this; a repo that
   reports only MAE will accidentally "prove" that a naive constant beats every model.
-* **The attention model's value is directional.** 53.0 % sign accuracy over 218 days × 4 assets is a
-  meaningful signal, and it beats both the LSTM and the momentum rule at the same MAE ballpark — but
-  218 overlapping test days are not enough for significance testing, so treat it as evidence, not
-  proof.
-* **Rolling-origin evaluation would be stronger.** The current split is a single chronological holdout.
-  A walk-forward loop (retrain monthly) is the natural next step and is not implemented.
+* **The attention model's directional numbers do not survive reseeding.** The single-split 53.0 %
+  looked like a signal and the model's attention maps are genuinely interpretable, but the
+  [seed sweep](#seed-sweep-are-the-results-real) shows the edge over an LSTM is inside the noise
+  band. Whatever is claimed here has to survive that check first.
+* **218 (or 274) overlapping test windows are not independent samples.** Overlapping 5-day targets
+  share most of their horizon, so even a seed-stable result would need a block bootstrap or
+  walk-forward design before it meant anything.
+* **Rolling-origin evaluation would be stronger.** The current split is a single chronological
+  holdout. A walk-forward loop (retrain monthly) is the natural next step and is not implemented.
 
-<!--SAME_SECTOR_TABLE-->
+### Same-sector control group
+
+The white-spirit group (Moutai, Wuliangye, Luzhou Laojiao, Shanxi Fenjiu) has a longer history — all
+four listed before 2019 — so its panel starts 2019-01-02 and the chronological split lands on a
+different test window (2025-08-01 → 2026-09-22, 274 windows). The two groups are therefore **not**
+strictly comparable; treat this as a second, independent look rather than a controlled A/B test.
+
+| model | epochs | sec | val MSE | MAE % | RMSE % | direction acc | MAE h1 | h5 |
+|---|---|---|---|---|---|---|---|---|
+| naive:zero | – | 0.0 | 17.06 | **2.016** | **2.743** | 0.002 * | 1.18 | 2.73 |
+| naive:mean | – | 0.0 | 17.24 | 2.081 | 2.807 | 0.395 | 1.20 | 2.85 |
+| var | – | 0.0 | 17.05 | 2.091 | 2.830 | 0.434 | 1.20 | 2.85 |
+| naive:momentum | – | 0.0 | 19.36 | 2.397 | 3.249 | 0.515 | 1.78 | 3.00 |
+| lstm | 39 | 3.8 | 19.87 | 2.520 | 3.359 | **0.526** | 1.81 | 3.37 |
+| transformer (self-attention) | 29 | 6.7 | 19.78 | 2.790 | 3.664 | 0.450 | 2.07 | 3.45 |
+| linear | 124 | 3.3 | 26.62 | 3.233 | 4.329 | 0.468 | 1.69 | 4.57 |
+
+This is the *opposite* ranking from the cross-sector group: with four nearly collinear consumer
+staples, cross-asset attention has little independent information to exploit, and the attention model
+is the only one below chance on direction. Reported as-is — it is the reason the seed sweep below
+exists.
+
+---
+
+## Seed sweep: are the results real?
+
+A single split with a single seed cannot separate skill from initialisation. `scripts/seed_sweep.py`
+retrains the attention model and its LSTM baseline across 5 seeds on both groups:
+
+| group | model | runs | direction acc (mean ± std) | MAE % (mean ± std) |
+|---|---|---|---|---|
+| cross_sector | transformer (self-attention) | 5 | 0.523 ± 0.011 | 3.226 ± 0.413 |
+| cross_sector | lstm | 5 | 0.514 ± 0.006 | 3.495 ± 0.246 |
+| same_sector | transformer (self-attention) | 5 | 0.487 ± 0.057 | 2.716 ± 0.396 |
+| same_sector | lstm | 5 | 0.517 ± 0.027 | 2.430 ± 0.192 |
+
+Reading:
+
+* the cross-sector attention edge over the LSTM shrinks from "53.0 % vs 52.2 %" (single run) to
+  **+0.9 pp** on average, while the seed spread is ±1.1 pp — the effect is **within noise**;
+* the same-sector single run (45.0 %) turns out to sit inside a 48.7 % ± 5.7 % distribution: that
+  number was an unlucky seed, not a property of the architecture;
+* MAE differences of a few tenths of a percent are likewise not separable from seed variance.
+
+**Conclusion: this repo does not demonstrate a robust directional edge for self-attention over an
+LSTM on daily A-share returns.** It demonstrates the pipeline, the leakage-safe evaluation, and the
+diagnostic that falsifies the tempting single-split claim.
 
 ---
 
@@ -209,6 +262,9 @@ aaf benchmark --epochs=150        # all models, same splits -> reports/benchmark
 aaf evaluate --run reports/runs/transformer_<stamp>     # metrics + attention profile
 aaf llm --run reports/runs/transformer_<stamp>          # DeepSeek news overlay
 aaf fetch --group=same_sector --name=panel_same         # white-spirit control group
+aaf tensors --name=panel_same --out=data/cache/tensors_same.npz
+aaf benchmark --tensors_path=data/cache/tensors_same.npz --report=reports/benchmark_same_sector.md
+python scripts/seed_sweep.py --seeds=5 --epochs=150      # mean +/- std across seeds
 pytest -q                         # 36 tests, no network required
 ```
 
@@ -234,12 +290,15 @@ src/astock_af/
   llm/news.py            news + filings + market newswire collectors
   llm/client.py          OpenAI-compatible chat client (JSON mode, retries)
   llm/overlay.py         prompt assembly, model-vs-LLM comparison, self-scoring
+scripts/seed_sweep.py    seed-variance check: is the directional edge real?
 ```
 
 ## Known limitations
 
-* Daily-return forecasting is close to a noise floor: report direction and calibration, not just MAE.
+* Daily-return forecasting is close to a noise floor: report direction and calibration, not just MAE,
+  and reseed before believing any of it.
 * One chronological holdout; no walk-forward retraining, no transaction costs, no position sizing.
+* The two asset groups cover different test periods, so cross-group comparison is indicative only.
 * The LLM overlay is a single call per asset with no self-consistency check, and its numeric
   `expected_return_pct` should be read as a coarse sentiment score, not a forecast.
 * The Tushare adapter is untested against the live API here (no token).

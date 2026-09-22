@@ -128,6 +128,7 @@ class CLI:
         epochs: int | None = None,
         out_dir: str = "reports/runs",
         report: str = "reports/benchmark.md",
+        seed: int | None = None,
     ) -> None:
         """Train every architecture with identical splits and tabulate metrics."""
         cfg = load_config(config)
@@ -135,7 +136,7 @@ class CLI:
         runs = []
         for architecture in [item.strip() for item in architectures.split(",") if item.strip()]:
             outcome = train_architecture(
-                tensors, cfg.model, cfg.train, architecture, out_dir=out_dir, epochs=epochs
+                tensors, cfg.model, cfg.train, architecture, out_dir=out_dir, epochs=epochs, seed=seed
             )
             runs.append(outcome["run_dir"])
         frame = benchmark_runs(runs)
