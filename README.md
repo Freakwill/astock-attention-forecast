@@ -310,6 +310,59 @@ fallback.
 
 ---
 
+## Forward forecast (the days that have not happened yet)
+
+`aaf forecast --run reports/runs/transformer_<stamp>` runs the trained model on the **last window in
+the panel** and prints a genuine forward view: `N` assets × `H` trading days ahead, with the target
+dates taken from the exchange calendar rather than guessed. Output for the 2026-09-22 close:
+
+```
+Target trading days: 2026-09-23, 2026-09-24, 2026-09-28, 2026-09-29, 2026-09-30
+                     (exchange calendar (akshare/sina))
+```
+
+(the calendar correctly skips 2026-09-25, the Mid-Autumn holiday — a weekday-fallback would have
+invented a trading day there.)
+
+**Raw model output** — forward log return in %:
+
+| asset | t+1 | t+2 | t+3 | t+4 | t+5 |
+|---|---|---|---|---|---|
+| CATL (300750.SZ) | −1.26 | −1.16 | −1.06 | −0.97 | −0.88 |
+| China Merchants Bank (600036.SH) | −1.34 | −1.32 | −1.30 | −1.28 | −1.26 |
+| Kweichow Moutai (600519.SH) | −1.36 | −1.35 | −1.35 | −1.34 | −1.34 |
+| SMIC (688981.SH) | −1.30 | −1.24 | −1.18 | −1.12 | −1.06 |
+
+**Bias-corrected** — the same minus a bias estimated on the *validation* slice (which precedes the
+as-of date, so this is not look-ahead):
+
+| asset | t+1 | t+2 | t+3 | t+4 | t+5 |
+|---|---|---|---|---|---|
+| CATL (300750.SZ) | −0.74 | −0.48 | −0.21 | +0.08 | +0.36 |
+| China Merchants Bank (600036.SH) | −0.92 | −0.83 | −0.73 | −0.63 | −0.52 |
+| Kweichow Moutai (600519.SH) | −1.01 | −1.02 | −1.02 | −1.02 | −1.02 |
+| SMIC (688981.SH) | −0.81 | −0.61 | −0.40 | −0.15 | +0.12 |
+
+Three honest readings:
+
+* **the raw output is not usable as-is.** Every name and horizon says ≈ −1.3 %, which is the residual
+  level bias, not information: the cross-sectional spread at t+1 is 0.10 pp.
+* **the correction does not fully remove the bias**, because it is estimated on a period that was
+  itself biased differently: validation bias −0.65 pp overall against −0.96 pp on the test window, so
+  the corrected forecast still sits about −0.32 pp low. The per-horizon *shape* of the bias is
+  informative though — flat for Moutai (−0.34 → −0.32, a pure level error) but growing for CATL
+  (−0.52 → −1.24, a persistent drift the model believes in).
+* **what is left is a relative view**: after correction CATL and SMIC turn positive by t+4/t+5 while
+  Moutai stays flat-negative and CMB stays negative. That is the shape of the model's opinion, and it
+  is the only part of this table worth arguing with.
+
+Full tables: [`reports/forecast.md`](reports/forecast.md), regenerated on every run. Because each
+forecast is dated and persisted, `score_previous()` grades it automatically once its horizon elapses —
+so this section is meant to become a track record, and currently says *"no earlier calls with an
+elapsed horizon yet"*.
+
+---
+
 ## Reproduce
 
 ```bash
@@ -322,13 +375,14 @@ aaf tensors                       # panel -> data/cache/tensors.npz
 aaf benchmark --epochs=150        # all models, same splits -> reports/benchmark.md + per-run PNGs
 aaf evaluate --run reports/runs/transformer_<stamp>     # metrics + attention profile
 aaf chart --run reports/runs/transformer_<stamp>        # README figure -> reports/figures/price_panel.png
+aaf forecast --run reports/runs/transformer_<stamp>     # next H trading days -> reports/forecast.md
 aaf llm --run reports/runs/transformer_<stamp>          # DeepSeek news overlay
 aaf fetch --group=same_sector --name=panel_same         # white-spirit control group
 aaf tensors --name=panel_same --out=data/cache/tensors_same.npz
 aaf benchmark --tensors_path=data/cache/tensors_same.npz --out_dir=reports/runs/same_sector \
               --report=reports/benchmark_same_sector.md
 python scripts/seed_sweep.py --seeds=5 --epochs=150      # mean +/- std across seeds
-pytest -q                         # 39 tests, no network required
+pytest -q                         # 46 tests, no network required
 ```
 
 `config/data.yaml` (universe, vendors, alignment), `config/dataset.yaml` (L, H, features, split
@@ -340,7 +394,7 @@ budget).
 ```
 src/astock_af/
   config.py              typed YAML config (dataclasses)
-  cli.py                 fire CLI: sources | fetch | coverage | tensors | train | benchmark | evaluate | chart | llm
+  cli.py                 fire CLI: sources | fetch | coverage | tensors | train | benchmark | evaluate | chart | forecast | llm
   data/symbols.py        symbol parsing, vendor-specific rendering, ambiguity guard
   data/sources.py        baostock / akshare / tushare adapters, one canonical schema
   data/panel.py          fetch chain, alignment, caching, provenance, coverage report
@@ -350,12 +404,13 @@ src/astock_af/
   models/dataset.py      windowing, purge-aware splits, torch loaders
   train.py               training loop, early stopping, run artefacts
   evaluate.py            metric tables, benchmark aggregation, attention summary, plots
+  forecast.py            next-H-days forward view + validation-slice bias correction
   llm/news.py            news + filings + market newswire collectors
   llm/client.py          OpenAI-compatible chat client (JSON mode, retries)
   llm/overlay.py         prompt assembly, model-vs-LLM comparison, self-scoring
 scripts/seed_sweep.py    seed-variance check: is the directional edge real?
 reports/figures/         committed README figure (regenerate with `aaf chart`)
-reports/{benchmark,benchmark_same_sector,seed_sweep,llm_overlay}.md   generated evidence
+reports/{benchmark,benchmark_same_sector,seed_sweep,llm_overlay,forecast}.md   generated evidence
 ```
 
 ## Known limitations
@@ -367,6 +422,8 @@ reports/{benchmark,benchmark_same_sector,seed_sweep,llm_overlay}.md   generated 
   deviation was worse than standing still. Removing the level (or fitting it separately from the shape)
   is not implemented, so the forecast is not tradable even where its ranking is informative.
 * One chronological holdout; no walk-forward retraining, no transaction costs, no position sizing.
+* The forward forecast (`aaf forecast`) still carries a residual level bias of roughly 0.3 pp/day after
+  validation-slice correction, so it is a *relative* view across names, not an expected return.
 * The two asset groups cover different test periods, so cross-group comparison is indicative only.
 * The LLM overlay is a single call per asset with no self-consistency check, and its numeric
   `expected_return_pct` should be read as a coarse sentiment score, not a forecast.

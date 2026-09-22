@@ -188,6 +188,28 @@ class CLI:
         path = plot_price_panel(panel, tensors=tensors, run_dir=run, out=out, asset=asset)
         print(f"[chart] -> {path}")
 
+    def forecast(
+        self,
+        run: str,
+        tensors_path: str = "data/cache/tensors.npz",
+        out: str = "reports/forecast.md",
+    ) -> None:
+        """Forecast the next H trading days from the last window in the panel.
+
+        Args:
+            run: A trained run directory (``reports/runs/transformer_<stamp>``).
+            tensors_path: Tensors the model was trained on.
+            out: Where to write the markdown report.
+        """
+        from .forecast import format_forecast, forward_forecast
+
+        forecast = forward_forecast(run, tensors_path)
+        markdown = format_forecast(forecast)
+        Path(out).parent.mkdir(parents=True, exist_ok=True)
+        Path(out).write_text(markdown, encoding="utf-8")
+        print(markdown)
+        print(f"[forecast] -> {out}")
+
     def llm(
         self,
         run: str | None = None,
