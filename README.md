@@ -263,7 +263,8 @@ aaf evaluate --run reports/runs/transformer_<stamp>     # metrics + attention pr
 aaf llm --run reports/runs/transformer_<stamp>          # DeepSeek news overlay
 aaf fetch --group=same_sector --name=panel_same         # white-spirit control group
 aaf tensors --name=panel_same --out=data/cache/tensors_same.npz
-aaf benchmark --tensors_path=data/cache/tensors_same.npz --report=reports/benchmark_same_sector.md
+aaf benchmark --tensors_path=data/cache/tensors_same.npz --out_dir=reports/runs/same_sector \
+              --report=reports/benchmark_same_sector.md
 python scripts/seed_sweep.py --seeds=5 --epochs=150      # mean +/- std across seeds
 pytest -q                         # 36 tests, no network required
 ```
