@@ -1,0 +1,44 @@
+# Data layer configuration.
+# `sources` is a priority chain: the first source that is available and returns
+# rows wins. `tushare` is listed last on purpose - it needs TUSHARE_TOKEN and at
+# the 120-credit tier it only serves unadjusted OHLCV (no PE/PB/turnover).
+panel:
+  sources: [baostock, akshare, tushare]
+  adjust: qfq            # qfq | hfq | none  (baostock/akshare honour this; tushare tier 120 does not)
+  start: "2019-01-01"
+  end: null              # null = today (vendor truncates to last trading day)
+
+  # Cross-sector group: four different industries so a single attention head
+  # budget can learn cross-asset regimes (consumer / battery / bank / foundry).
+  symbols:
+    - code: "600519.SH"
+      name: "Kweichow Moutai"
+      sector: "Consumer-Staples"
+    - code: "300750.SZ"
+      name: "CATL"
+      sector: "Battery"
+    - code: "600036.SH"
+      name: "China Merchants Bank"
+      sector: "Bank"
+    - code: "688981.SH"
+      name: "SMIC"
+      sector: "Semiconductor"
+
+  # Market context series (also used as an exogenous feature).
+  benchmark:
+    code: "000300.SH"
+    name: "CSI300"
+
+  # Same-sector control group (white spirit), used by `experiments.same_sector`.
+  same_sector_symbols:
+    - code: "600519.SH"
+      name: "Kweichow Moutai"
+    - code: "000858.SZ"
+      name: "Wuliangye"
+    - code: "000568.SZ"
+      name: "Luzhou Laojiao"
+    - code: "600809.SH"
+      name: "Shanxi Fenjiu"
+
+  cache_dir: "data/cache"
+  align: intersection    # intersection | outer -- union keeps assets with different IPO dates

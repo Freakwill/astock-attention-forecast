@@ -1,0 +1,14 @@
+# LLM overlay settings (news-grounded directional view).
+data_config: config/data.yaml
+cache_dir: data/cache
+panel_name: panel
+
+llm:
+  api_key_env: DEEPSEEK_API_KEY    # looked up in the env, then in ~/.hermes/.env
+  base_url: https://api.deepseek.com
+  model: deepseek-chat             # avoid the reasoning variants: they time out on long prompts
+  temperature: 0.2
+  max_tokens: 1500
+  timeout: 120
+  horizon_days: 5
+  max_news_per_symbol: 8

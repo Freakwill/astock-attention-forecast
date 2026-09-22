@@ -1,0 +1,19 @@
+# Model + optimization settings.
+model:
+  architecture: transformer   # transformer (self-attention, this project) | lstm | linear | var
+  d_model: 64
+  n_heads: 4
+  n_layers: 2
+  dropout: 0.1
+  dim_feedforward: 128
+
+train:
+  epochs: 150
+  batch_size: 64
+  learning_rate: 0.0003
+  weight_decay: 0.0001
+  grad_clip: 1.0
+  patience: 25
+  seed: 42
+  device: auto                # auto -> mps on Apple Silicon, else cpu
+  out_dir: reports/runs
