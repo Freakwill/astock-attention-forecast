@@ -164,6 +164,30 @@ class CLI:
             tensors = PanelTensors.load(tensors_path)
             print(attention_summary(run, tensors).to_string(index=False))
 
+    def chart(
+        self,
+        cache_dir: str = "data/cache",
+        name: str = "panel",
+        tensors_path: str = "data/cache/tensors.npz",
+        run: str | None = None,
+        out: str = "reports/figures/price_panel.png",
+        asset: int = 0,
+    ) -> None:
+        """Draw the README figure: indexed prices with the split layout, plus the model's output.
+
+        Args:
+            cache_dir: Where the cached panel lives.
+            name: Panel cache name (``panel`` cross-sector, ``panel_same`` control group).
+            tensors_path: Tensors used to mark the train/validation/test regions.
+            run: Optional run directory whose out-of-sample forecast is overlaid.
+            out: Destination PNG.
+            asset: Asset index to show in the lower panel.
+        """
+        panel, _ = load_panel(cache_dir, name)
+        tensors = PanelTensors.load(tensors_path)
+        path = plot_price_panel(panel, tensors=tensors, run_dir=run, out=out, asset=asset)
+        print(f"[chart] -> {path}")
+
     def llm(
         self,
         run: str | None = None,
@@ -184,6 +208,7 @@ from .evaluate import (  # noqa: E402 - imported after CLI to keep the module im
     format_benchmark,
     load_run,
     metrics_table,
+    plot_price_panel,
     plot_run,
 )
 from .train import train_architecture  # noqa: E402

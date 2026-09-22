@@ -185,7 +185,8 @@ def latest_forecast(run_dir: str | Path, tensors_path: str | Path = "data/cache/
         window = torch.from_numpy(tensors.x[-tensors.lookback :][None].astype("float32"))
         with torch.no_grad():
             forecast, _ = model(window)
-        prediction = forecast.numpy()[0]
+        # the network predicts the deviation from the training-period mean; put the level back
+        prediction = forecast.numpy()[0] + checkpoint.get("target_mean", 0.0)
     else:
         var_path = run_dir / "var_model.pkl"
         if var_path.is_file():

@@ -55,6 +55,24 @@ def test_baseline_shapes(cls) -> None:
     assert attention is None
 
 
+@pytest.mark.parametrize("cls", [AttentionForecaster, LinearForecaster, LSTMForecaster])
+def test_point_initialisation_starts_at_the_trivial_forecast(cls) -> None:
+    """Every learned model must start at the training-period mean, not at random noise.
+
+    Otherwise the forecast level is learned from scratch too, and early stopping keeps
+    whichever snapshot has the smallest - still large - level error, which scores worse
+    than simply predicting the mean (an observed transformer sat at a -1.8 pp/day bias
+    with a test MAE of 3.16% against 2.47% for predicting zero).
+    """
+    from astock_af.train import _zero_output_layer
+
+    model = cls(**SHAPES)
+    model.eval()  # dropout off, so a point-initialised model returns exact zeros
+    _zero_output_layer(model, SHAPES["n_assets"] * SHAPES["horizon"])
+    forecast, _ = model(_batch())
+    assert forecast.abs().max() == 0, f"{cls.__name__} does not start at the trivial forecast"
+
+
 def test_attention_is_permutation_sensitive() -> None:
     """Shuffling lookback steps must change the output, or the encoder is ignoring order."""
     model = AttentionForecaster(**SHAPES, d_model=32)

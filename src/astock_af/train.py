@@ -171,6 +171,32 @@ def train_architecture(
     return {"run_dir": str(run_dir), "metrics": payload, "history": history, "predictions": predictions}
 
 
+def _zero_output_layer(model: nn.Module, n_outputs: int) -> str:
+    """Point-initialise a forecaster at the trivial prediction (return the layer path).
+
+    A randomly initialised attention stack emits large-magnitude noise, so training
+    starts far from the target level and early stopping keeps the least-bad snapshot
+    anyway: an observed transformer ended up with a -1.8 pp/day level bias and a test
+    MAE of 3.16% against 2.47% for predicting zero. Zeroing the output pathway makes
+    every learned model start exactly at ``naive:mean`` (zero in the centred target
+    space), so any reported gain over that baseline has to be earned out of sample
+    rather than being a rounding error of an unlucky initialisation.
+    """
+    candidates = [
+        (name, module)
+        for name, module in model.named_modules()
+        if isinstance(module, nn.Linear) and module.out_features in {1, n_outputs}
+    ]
+    if not candidates:
+        raise RuntimeError(f"no output layer with {1} or {n_outputs} outputs found")
+    name, layer = candidates[-1]
+    with torch.no_grad():
+        layer.weight.zero_()
+        if layer.bias is not None:
+            layer.bias.zero_()
+    return name
+
+
 def _fit_torch(
     tensors: PanelTensors,
     splits,
@@ -184,6 +210,9 @@ def _fit_torch(
 ) -> dict:
     torch_device = resolve_device(device or train_cfg.device)
     model = build_forecaster(architecture, tensors, model_cfg).to(torch_device)
+    layer = _zero_output_layer(model, tensors.n_assets * tensors.horizon)
+    if verbose:
+        print(f"    point-initialised {layer} at the training-period mean forecast")
     optimizer = torch.optim.AdamW(
         model.parameters(), lr=train_cfg.learning_rate, weight_decay=train_cfg.weight_decay
     )
@@ -194,6 +223,17 @@ def _fit_torch(
     val_x = torch.from_numpy(splits.x_val).to(torch_device)
     val_y = torch.from_numpy(splits.y_val).to(torch_device)
 
+    # Centre the targets on the training-period per-(asset, horizon) mean and add it
+    # back at inference: the model learns the deviation, not the level. Feeding raw
+    # returns leaves the trivial solution (~0) to be found by gradient descent, and
+    # early stopping then locks in a worse-than-trivial plateau - an observed
+    # transformer emitted a near-constant -1.36 pp for every asset and horizon while
+    # the training-period drift was ~0, at val loss 14.5 against 11.6 for predicting
+    # zero. With centring, the naive-mean forecast is the model's starting point and
+    # `naive:mean` becomes the loss it has to beat.
+    target_mean = splits.y_train.mean(axis=0).astype(np.float32)
+    target_mean_t = torch.from_numpy(target_mean).to(torch_device)
+
     best_loss, best_state, stale, history = float("inf"), None, 0, []
     for epoch in range(1, epochs + 1):
         model.train()
@@ -203,7 +243,7 @@ def _fit_torch(
             batch_y = batch_y.to(torch_device)
             optimizer.zero_grad(set_to_none=True)
             forecast, _ = model(batch_x)
-            loss = criterion(forecast * TARGET_SCALE, batch_y * TARGET_SCALE)
+            loss = criterion(forecast * TARGET_SCALE, (batch_y - target_mean_t) * TARGET_SCALE)
             loss.backward()
             nn.utils.clip_grad_norm_(model.parameters(), train_cfg.grad_clip)
             optimizer.step()
@@ -213,7 +253,9 @@ def _fit_torch(
         model.eval()
         with torch.no_grad():
             val_forecast, _ = model(val_x)
-            val_loss = float(criterion(val_forecast * TARGET_SCALE, val_y * TARGET_SCALE).item())
+            val_loss = float(
+                criterion(val_forecast * TARGET_SCALE, (val_y - target_mean_t) * TARGET_SCALE).item()
+            )
         history.append({"epoch": epoch, "train_loss": running / len(splits.x_train), "val_loss": val_loss})
         if verbose and (epoch == 1 or epoch % 10 == 0):
             print(f"    epoch {epoch:3d}  train {history[-1]['train_loss']:.4f}  val {val_loss:.4f}")
@@ -235,6 +277,7 @@ def _fit_torch(
     torch.save(
         {
             "state_dict": model.state_dict(),
+            "target_mean": target_mean,
             "architecture": architecture,
             "model_config": asdict(model_cfg),
             "shapes": {

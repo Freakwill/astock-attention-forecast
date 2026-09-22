@@ -5,7 +5,7 @@ A directional edge that only shows up for one seed is noise, not skill.
 
 | group | model | runs | direction acc (mean +/- std) | MAE % (mean +/- std) | RMSE % |
 |---|---|---|---|---|---|
-| cross_sector | transformer | 5 | 0.523 +/- 0.011 | 3.226 +/- 0.413 | 4.345 |
-| cross_sector | lstm | 5 | 0.514 +/- 0.006 | 3.495 +/- 0.246 | 4.750 |
-| same_sector | transformer | 5 | 0.487 +/- 0.057 | 2.716 +/- 0.396 | 3.499 |
-| same_sector | lstm | 5 | 0.517 +/- 0.027 | 2.430 +/- 0.192 | 3.229 |
+| cross_sector | transformer | 5 | 0.531 +/- 0.019 | 2.649 +/- 0.121 | 3.822 |
+| cross_sector | lstm | 5 | 0.529 +/- 0.005 | 2.547 +/- 0.042 | 3.727 |
+| same_sector | transformer | 5 | 0.566 +/- 0.027 | 2.048 +/- 0.034 | 2.826 |
+| same_sector | lstm | 5 | 0.477 +/- 0.014 | 2.149 +/- 0.052 | 2.878 |
