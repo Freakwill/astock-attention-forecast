@@ -279,7 +279,7 @@ def current_view(prices: pd.DataFrame, target_vol: float = 0.15, cap: float = 0.
     latest["core_weight"] = core.round(3)
     active = (latest["above_ma20"] & latest["ma20_above_ma60"]).to_numpy()
     trend_weight = np.zeros(len(latest))
-    trend_weight[active] = core.to_numpy()[active]
+    trend_weight[active] = core[active]
     latest["trend_weight"] = trend_weight.round(3)
     latest["final_weight"] = np.minimum(latest["core_weight"], latest["trend_weight"]).round(3)
     return latest[
