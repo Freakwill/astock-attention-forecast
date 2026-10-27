@@ -271,7 +271,12 @@ def current_view(prices: pd.DataFrame, target_vol: float = 0.15, cap: float = 0.
     latest["above_ma20"] = latest["close"] > latest["ma20"]
     latest["ma20_above_ma60"] = latest["ma20"] > latest["ma60"]
     core = np.minimum(cap, target_vol / latest["vol20"].clip(lower=1e-6))
-    latest["core_weight"] = np.where(latest["vol20"].notna(), core, 0.0).round(3)
+    core = np.where(latest["vol20"].notna(), core, 0.0)
+    # Same no-leverage rule as _vol_target_weights, so the printed table cannot
+    # show 133% "core" while the backtest uses 100%.
+    if core.sum() > 1.0:
+        core = core / core.sum()
+    latest["core_weight"] = core.round(3)
     active = (latest["above_ma20"] & latest["ma20_above_ma60"]).to_numpy()
     trend_weight = np.zeros(len(latest))
     trend_weight[active] = core.to_numpy()[active]
