@@ -1,10 +1,13 @@
 # Data layer configuration.
 # `sources` is a priority chain: the first source that is available and returns
-# rows wins. `tushare` is listed last on purpose - it needs TUSHARE_TOKEN and at
-# the 120-credit tier it only serves unadjusted OHLCV (no PE/PB/turnover).
+# rows wins. akshare leads because it is token-less, fast (~0.3 s/symbol on the
+# Sina route) and needs no session; baostock stays as a fallback but is no longer
+# the default (its login round-trip and ~19 s/symbol made it inconvenient), and
+# tushare is last because it needs TUSHARE_TOKEN and at the 120-credit tier only
+# serves unadjusted OHLCV (no PE/PB/turnover).
 panel:
-  sources: [baostock, akshare, tushare]
-  adjust: qfq            # qfq | hfq | none  (baostock/akshare honour this; tushare tier 120 does not)
+  sources: [akshare, baostock, tushare]
+  adjust: qfq            # qfq | hfq | none  (akshare ETF history is raw and ignores this)
   start: "2019-01-01"
   end: null              # null = today (vendor truncates to last trading day)
 
@@ -39,6 +42,25 @@ panel:
       name: "Luzhou Laojiao"
     - code: "600809.SH"
       name: "Shanxi Fenjiu"
+
+  # ETF group: AI/ChiNext, semiconductor, and Nasdaq-100 (QDII). Three different
+  # risk drivers - domestic growth, a cyclical capex cycle, and US tech + CNY -
+  # which is exactly the kind of heterogeneity a cross-asset attention model is
+  # supposed to exploit. Note 159142 only listed on 2025-12-12, so the common
+  # window is short; `aaf fetch` reports how many dates it drops.
+  etf_symbols:
+    - code: "159142.SZ"
+      name: "ChiNext AI ETF"
+      kind: "etf"
+      sector: "AI/ChiNext"
+    - code: "512760.SH"
+      name: "ChinaAMC Semiconductor ETF"
+      kind: "etf"
+      sector: "Semiconductor"
+    - code: "513100.SH"
+      name: "Guotai Nasdaq-100 ETF"
+      kind: "etf"
+      sector: "US-Tech/QDII"
 
   cache_dir: "data/cache"
   align: intersection    # intersection | outer -- union keeps assets with different IPO dates

@@ -1,0 +1,41 @@
+# Data config whose *default* universe is the three ETFs.
+# `config/data.yaml` keeps the stock universe as `symbols`, and the LLM overlay
+# builds its universe from that field - so the ETF overlay needs a config where
+# the ETFs are `symbols`, not `etf_symbols`.
+panel:
+  sources: [akshare, baostock, tushare]
+  adjust: qfq
+  start: "2019-01-01"
+  end: null
+
+  symbols:
+    - code: "159142.SZ"
+      name: "ChiNext AI ETF"
+      kind: "etf"
+      sector: "AI/ChiNext"
+    - code: "512760.SH"
+      name: "ChinaAMC Semiconductor ETF"
+      kind: "etf"
+      sector: "Semiconductor"
+    - code: "513100.SH"
+      name: "Guotai Nasdaq-100 ETF"
+      kind: "etf"
+      sector: "US-Tech/QDII"
+
+  benchmark:
+    code: "000300.SH"
+    name: "CSI300"
+
+  etf_symbols:
+    - code: "159142.SZ"
+      name: "ChiNext AI ETF"
+      kind: "etf"
+    - code: "512760.SH"
+      name: "ChinaAMC Semiconductor ETF"
+      kind: "etf"
+    - code: "513100.SH"
+      name: "Guotai Nasdaq-100 ETF"
+      kind: "etf"
+
+  cache_dir: "data/cache"
+  align: intersection

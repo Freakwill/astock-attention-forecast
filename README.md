@@ -43,8 +43,8 @@ source wins per symbol.
 
 | source | token | role in this repo | what it provides |
 |---|---|---|---|
-| [baostock](https://pypi.org/project/baostock/) | none | **primary** (all market data here) | pre-adjusted (qfq) OHLCV, amount, turnover, PE/PB, `tradestatus`; also indices |
-| [akshare](https://akshare.akfamily.xyz/) | none | fallback for prices; **primary for news** | Sina daily bars; news / filings / market newswire |
+| [baostock](https://pypi.org/project/baostock/) | none | **fallback** (it was the primary for the stock panel below) | pre-adjusted (qfq) OHLCV, amount, turnover, PE/PB, `tradestatus`; also indices |
+| [akshare](https://akshare.akfamily.xyz/) | none | **primary** for prices and news, including ETFs | Sina daily bars (stocks, ETFs, indices); news / filings / market newswire |
 | [tushare](https://tushare.pro/) | **required** | adapter present, **not exercised** (no token) | at the free 120-credit tier only unadjusted `daily` |
 
 > The Tushare adapter is included so the pipeline can switch vendors with `--source tushare`, but it
@@ -360,6 +360,28 @@ Full tables: [`reports/forecast.md`](reports/forecast.md), regenerated on every 
 forecast is dated and persisted, `score_previous()` grades it automatically once its horizon elapses —
 so this section is meant to become a track record, and currently says *"no earlier calls with an
 elapsed horizon yet"*.
+
+---
+
+## ETF experiment (159142 / 512760 / 513100)
+
+A separate panel answers the "three ETFs, what do I do" question, and it is worth reading for its
+negatives as much as its numbers: [`reports/etf_report.md`](reports/etf_report.md).
+
+* **Data**: akshare-first (`config/data.yaml`, `sources: [akshare, baostock, tushare]`), ETF support in
+  `Symbol.kind="etf"` and a `fund_etf_hist_sina` branch, `turn` dropped from the feature set because
+  the ETF route exposes no turnover. 159142 only listed on 2025-12-12, so the common window is 208
+  days and `aaf fetch` reports the 1685 dropped dates rather than hiding them.
+* **Model**: on 127 training windows the self-attention model is indistinguishable from predicting
+  zero (MAE 3.422 % vs 3.411 %, direction 0.414) — so the panel does not demonstrate skill, and the
+  report says so before showing the forecast.
+* **Strategy**: `aaf strategy` backtests trend / vol-target / rotation / buy-and-hold over 3216 days
+  with costs. **None beat buy & hold** (CAGR 19.46 %, Sharpe 0.89); the trend rule halves the drawdown
+  (−17.7 % vs −36.0 %) for two thirds of the return, and that result is stable across MA pairs
+  (6.1–6.5 % CAGR for every 10/30 … 120/200). The report therefore recommends buy & hold, with the
+  trend rule as drawdown insurance, rather than pretending a rule set won.
+* **Forward view**: `aaf forecast` and a news-grounded LLM view for 2026-10-27 → 11-02, both stating
+  that the model's numbers are an opinion with no validated edge.
 
 ---
 

@@ -1,0 +1,18 @@
+# Feature set for the ETF panel.
+# `turn` is absent from the source: the akshare/Sina ETF history endpoint exposes
+# no turnover and no outstanding share count, and fabricating one from volume
+# would be inventing a feature. Everything else is computable from OHLCV+amount.
+features:
+  lookback: 30            # L: timesteps fed to the self-attention encoder
+  horizon: 5              # H: forward trading days predicted jointly
+  include_benchmark: true # adds bench_return + rel_* cross-asset context channels
+  train_ratio: 0.7
+  val_ratio: 0.15
+  features:
+    - log_return
+    - intraday_range
+    - log_volume
+    - log_amount
+    - mom_5
+    - mom_20
+    - vol_20

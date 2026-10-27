@@ -24,6 +24,7 @@ class DataConfig:
     symbols: list[Symbol] = field(default_factory=list)
     benchmark: Symbol | None = None
     same_sector_symbols: list[Symbol] = field(default_factory=list)
+    etf_symbols: list[Symbol] = field(default_factory=list)
 
     @property
     def ts_codes(self) -> list[str]:
@@ -108,6 +109,7 @@ def load_data_config(path: str | Path) -> DataConfig:
         symbols=parse_many(raw.get("symbols", [])),
         benchmark=parse_many([raw["benchmark"]])[0] if raw.get("benchmark") else None,
         same_sector_symbols=parse_many(raw.get("same_sector_symbols", [])),
+        etf_symbols=parse_many(raw.get("etf_symbols", [])),
     )
 
 

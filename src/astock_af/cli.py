@@ -43,7 +43,16 @@ class CLI:
             end: Override the configured end date.
         """
         cfg = load_data_config(data_config)
-        symbols = cfg.symbols if group == "cross_sector" else cfg.same_sector_symbols
+        groups = {
+            "cross_sector": cfg.symbols,
+            "same_sector": cfg.same_sector_symbols,
+            "etf": cfg.etf_symbols,
+        }
+        if group not in groups:
+            raise ValueError(f"group must be one of {sorted(groups)}, got {group!r}")
+        if not groups[group]:
+            raise ValueError(f"group {group!r} has no symbols in {data_config}")
+        symbols = groups[group]
         if cfg.benchmark is not None:
             symbols = [*symbols, cfg.benchmark]
         print(f"[fetch] group={group} adjust={cfg.adjust} align={cfg.align}")
@@ -210,6 +219,118 @@ class CLI:
         print(markdown)
         print(f"[forecast] -> {out}")
 
+    def strategy(
+        self,
+        codes: str = "159142,512760,513100",
+        target_vol: float = 0.15,
+        cap: float = 0.5,
+        out: str = "reports/etf_strategy.md",
+    ) -> None:
+        """Backtest trend / rotation / buy-and-hold and print the current target weights.
+
+        Args:
+            codes: Comma-separated ETF codes (bare or ``ts_code``).
+            target_vol: Annualised volatility target used to size each sleeve.
+            cap: Maximum weight per ETF (no leverage, the rest stays in cash).
+            out: Where to write the markdown report.
+        """
+        from .strategy import (
+            COST_PER_SIDE,
+            buy_and_hold,
+            current_view,
+            load_history,
+            rotation_strategy,
+            trend_strategy,
+            vol_target_strategy,
+        )
+
+        symbols = [code.strip() for code in codes.split(",") if code.strip()]
+        prices = load_history(symbols)
+        sleeves = [
+            buy_and_hold(prices),
+            vol_target_strategy(prices, target_vol, cap),
+            trend_strategy(prices, target_vol, cap),
+            rotation_strategy(prices, target_vol=target_vol, cap=cap),
+        ]
+        view = current_view(prices, target_vol=target_vol, cap=cap)
+
+        lines = [
+            "# ETF strategy - trend, rotation, buy & hold",
+            "",
+            f"History: {prices.index[0].date()} .. {prices.index[-1].date()} "
+            f"({len(prices)} trading days, {prices.shape[1]} ETFs).",
+            f"Costs: {COST_PER_SIDE * 100:.2f}% per side on turnover. Long/cash only, no leverage.",
+            f"Sizing: inverse volatility, target {target_vol:.0%} annualised, cap {cap:.0%} per ETF.",
+            "",
+            "## Backtest, net of costs",
+            "",
+            "| strategy | CAGR % | vol % | Sharpe | max DD % | Calmar | exposure % | turnover/yr |",
+            "|---|---|---|---|---|---|---|---|",
+        ]
+        for result in sleeves:
+            s = result.stats
+            lines.append(
+                f"| {result.name} | {s['cagr_pct']} | {s['vol_pct']} | {s['sharpe']} | {s['max_dd_pct']} "
+                f"| {s['calmar']} | {s['exposure_pct']} | {s['turnover_yr']} |"
+            )
+
+        lines += [
+            "",
+            "## Per-ETF trend sleeve vs buy & hold",
+            "",
+            "| ETF | trend CAGR % | trend max DD % | buy&hold CAGR % | buy&hold max DD % |",
+            "|---|---|---|---|---|",
+        ]
+        for code in prices.columns:
+            single = prices[[code]]
+            trend = trend_strategy(single, target_vol, cap)
+            hold = buy_and_hold(single)
+            lines.append(
+                f"| {code} | {trend.stats['cagr_pct']} | {trend.stats['max_dd_pct']} "
+                f"| {hold.stats['cagr_pct']} | {hold.stats['max_dd_pct']} |"
+            )
+
+        lines += [
+            "",
+            "## The same idea at other MA lengths (sensitivity, not a menu to pick from)",
+            "",
+            "| fast | slow | CAGR % | Sharpe | max DD % | exposure % |",
+            "|---|---|---|---|---|---|",
+        ]
+        for fast, slow in ((10, 30), (20, 60), (60, 120), (120, 200)):
+            result = trend_strategy(prices, target_vol, cap, fast=fast, slow=slow)
+            s = result.stats
+            lines.append(
+                f"| {fast} | {slow} | {s['cagr_pct']} | {s['sharpe']} | {s['max_dd_pct']} | {s['exposure_pct']} |"
+            )
+
+        lines += [
+            "",
+            f"## Current readings and target weights (as of {view['date'].iloc[0].date()}, for the next session)",
+            "",
+            "| asset | close | MA20 | MA60 | 20d mom % | 60d mom % | 20d vol % | dd from 60d high % | above MA20 | MA20>MA60 | core w | trend w | final w |",
+            "|---|---|---|---|---|---|---|---|---|---|---|---|---|",
+        ]
+        for _, row in view.iterrows():
+            lines.append(
+                f"| {row['asset']} | {row['close']:.3f} | {row['ma20']:.3f} | {row['ma60']:.3f} "
+                f"| {row['mom20'] * 100:+.2f} | {row['mom60'] * 100:+.2f} | {row['vol20'] * 100:.1f} "
+                f"| {row['dd60'] * 100:+.2f} | {bool(row['above_ma20'])} | {bool(row['ma20_above_ma60'])} "
+                f"| {row['core_weight']:.1%} | {row['trend_weight']:.1%} | {row['final_weight']:.1%} |"
+            )
+        total = float(view["final_weight"].sum())
+        lines += [
+            "",
+            f"Final allocation: invested {total:.1%}, cash {1 - total:.1%} (final = min(core, trend)).",
+            "",
+        ]
+
+        markdown = "\n".join(lines)
+        Path(out).parent.mkdir(parents=True, exist_ok=True)
+        Path(out).write_text(markdown + "\n", encoding="utf-8")
+        print(markdown)
+        print(f"[strategy] -> {out}")
+
     def llm(
         self,
         run: str | None = None,
@@ -221,6 +342,10 @@ class CLI:
         """Ask an LLM for a sentiment-driven view and score it against the model / realized returns."""
         from .llm.overlay import run_overlay
 
+        # fire turns `--symbols=159142,512760` into a tuple, so normalise before
+        # handing it to the overlay, which expects the comma-separated string.
+        if isinstance(symbols, (tuple, list)):
+            symbols = ",".join(str(item) for item in symbols)
         run_overlay(config_path=config, run_dir=run, days=days, symbols=symbols, out=out)
 
 

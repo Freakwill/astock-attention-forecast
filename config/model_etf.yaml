@@ -1,0 +1,24 @@
+# Smaller model for the ETF panel.
+# 159142 listed on 2025-12-12, so the common three-ETF window holds only ~190
+# trading days (~150 usable windows after the lookback and the 5-day horizon).
+# A 2-layer d_model=64 transformer has far more parameters than that supports, so
+# this config shrinks capacity and raises dropout. The benchmark still prints the
+# naive references, which is what the model has to beat.
+model:
+  architecture: transformer   # transformer (self-attention, this project) | lstm | linear | var
+  d_model: 32
+  n_heads: 4
+  n_layers: 1
+  dropout: 0.2
+  dim_feedforward: 64
+
+train:
+  epochs: 120
+  batch_size: 32
+  learning_rate: 0.0003
+  weight_decay: 0.0001
+  grad_clip: 1.0
+  patience: 20
+  seed: 42
+  device: auto                # auto -> mps on Apple Silicon, else cpu
+  out_dir: reports/runs/etf

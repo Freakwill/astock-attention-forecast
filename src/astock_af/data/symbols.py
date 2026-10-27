@@ -64,6 +64,13 @@ class Symbol:
         return self.ts_code
 
 
+# ETF / LOF prefixes. None of these collide with stock codes, so a bare code can
+# be resolved without a suffix: 51x/52x/56x/58x are Shanghai funds, 15x/16x/18x
+# are Shenzhen funds (159142 = SZ; 512760 / 513100 = SH).
+_ETF_SH_PREFIXES = ("50", "51", "52", "56", "58")
+_ETF_SZ_PREFIXES = ("15", "16", "18")
+
+
 def _infer_exchange(code: str) -> str:
     if _SH_RE.match(code):
         return "SH"
@@ -71,6 +78,10 @@ def _infer_exchange(code: str) -> str:
         return "SZ"
     if _BJ_RE.match(code):
         return "BJ"
+    if code.startswith(_ETF_SH_PREFIXES):
+        return "SH"
+    if code.startswith(_ETF_SZ_PREFIXES):
+        return "SZ"
     raise SymbolError(f"cannot infer exchange for code {code!r}; pass an explicit suffix like 000300.SH")
 
 

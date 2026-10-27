@@ -176,6 +176,15 @@ class AkshareSource(DataSource):
             df = ak.stock_zh_index_daily(symbol=symbol.sina)
             df["date"] = pd.to_datetime(df["date"])
             df = df[(df["date"] >= start) & (df["date"] <= end)]
+        elif symbol.kind == "etf":
+            # Sina's ETF history is raw (unadjusted) and carries no turnover or
+            # outstanding share count, so `turn` stays empty and the ETF feature
+            # set omits it (see config/dataset_etf.yaml). ETF distributions are
+            # rare enough that the unadjusted series is used as-is.
+            df = ak.fund_etf_hist_sina(symbol=symbol.sina)
+            df["date"] = pd.to_datetime(df["date"])
+            df = df[(df["date"] >= start) & (df["date"] <= end)]
+            df["turn"] = pd.NA
         else:
             df = ak.stock_zh_a_daily(symbol=symbol.sina, start_date=s, end_date=e, adjust=adj)
         df = _coerce(df, ["open", "high", "low", "close", "volume", "amount", "outstanding_share", "turnover"])
