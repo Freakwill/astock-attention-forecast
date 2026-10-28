@@ -382,6 +382,11 @@ negatives as much as its numbers: [`reports/etf_report.md`](reports/etf_report.m
   trend rule as drawdown insurance, rather than pretending a rule set won.
 * **Forward view**: `aaf forecast` and a news-grounded LLM view for 2026-10-27 → 11-02, both stating
   that the model's numbers are an opinion with no validated edge.
+* **Dependence**: `aaf mi` puts a number on "does yesterday tell you anything about today". Lag-1
+  mutual information is zero for every cross-asset pair once the shuffle null is subtracted (largest
+  excess 0.040 bits on 206 days, p > 0.07; the Nasdaq → chip pair is 0.0000 bits raw, p = 1.000), and
+  only 513100's own |return| autocorrelation is nominally significant (p = 0.045, gone under a
+  Bonferroni correction). Direction carries no information; the second moment carries a little.
 
 ---
 
@@ -427,6 +432,7 @@ src/astock_af/
   train.py               training loop, early stopping, run artefacts
   evaluate.py            metric tables, benchmark aggregation, attention summary, plots
   forecast.py            next-H-days forward view + validation-slice bias correction
+  mi.py                  lag-1 mutual information (kNN) with a shuffle null
   llm/news.py            news + filings + market newswire collectors
   llm/client.py          OpenAI-compatible chat client (JSON mode, retries)
   llm/overlay.py         prompt assembly, model-vs-LLM comparison, self-scoring

@@ -219,6 +219,72 @@ class CLI:
         print(markdown)
         print(f"[forecast] -> {out}")
 
+    def mi(
+        self,
+        codes: str = "159142,512760,513100",
+        permutations: int = 200,
+        neighbors: int = 3,
+        out: str = "reports/mi_etf.md",
+    ) -> None:
+        """Estimate lag-1 mutual information between the ETFs and write the table.
+
+        Answers "does yesterday tell you anything about today" with dependence
+        rather than correlation, using a kNN estimator plus a shuffle null so the
+        finite-sample bias is separated from the estimate.
+
+        Args:
+            codes: Comma-separated ETF codes.
+            permutations: Shuffles used to build the null distribution.
+            out: Where to write the markdown report.
+        """
+        import numpy as np
+
+        from .mi import format_scores, lag1_scores
+        from .strategy import load_history
+
+        # fire splits `--codes=159142,512760` into a tuple; normalise it back.
+        if isinstance(codes, (tuple, list)):
+            codes = ",".join(str(item) for item in codes)
+        symbols = [code.strip() for code in codes.split(",") if code.strip()]
+        prices = load_history(symbols)
+        returns = np.log(prices.astype(float)).diff()
+
+        level = lag1_scores(returns, transform="level", n_permutations=permutations, n_neighbors=neighbors)
+        magnitude = lag1_scores(returns, transform="abs", n_permutations=permutations, n_neighbors=neighbors)
+
+        counts = returns.notna().sum().to_dict()
+        lines = [
+            "# Lag-1 mutual information: I(x_{t-1}; y_t)",
+            "",
+            f"Estimator: kNN (k={neighbors}) in nats, converted to bits. Null: {permutations} shuffles of the",
+            "target series, which keeps the marginals and destroys the dependence - so `shuffle mean`",
+            "is what the bias alone produces and `excess bits` is the estimate that matters.",
+            "",
+            f"Observations per series: {', '.join(f'{k}={v}' for k, v in counts.items())}. "
+            "Pairs involving 159142 are limited by its 2025-12-12 listing.",
+            "",
+            f"Bonferroni threshold for 9 directed pairs: p < {0.05 / 9:.4f}.",
+            "",
+            format_scores(level, "Signed returns (direction)"),
+            "",
+            format_scores(magnitude, "Absolute returns (volatility clustering)"),
+            "",
+            "Reading notes:",
+            "",
+            "* `excess bits` is the number to trust; a raw MI that equals its shuffle mean is bias.",
+            "* `Pearson` is there to show when MI and correlation agree - if `excess bits` is",
+            "  positive while `Pearson` is ~0, the dependence is nonlinear (or the estimate is noise).",
+            "* Volatility clustering is expected to be the *real* dependence: it is the one thing",
+            "  daily equity data reliably has. Directional predictability is what the forecasting",
+            "  model would need, and it is what this table tests.",
+            "",
+        ]
+        markdown = "\n".join(lines)
+        Path(out).parent.mkdir(parents=True, exist_ok=True)
+        Path(out).write_text(markdown + "\n", encoding="utf-8")
+        print(markdown)
+        print(f"[mi] -> {out}")
+
     def strategy(
         self,
         codes: str = "159142,512760,513100",
@@ -244,6 +310,9 @@ class CLI:
             vol_target_strategy,
         )
 
+        # fire splits `--codes=159142,512760` into a tuple; normalise it back.
+        if isinstance(codes, (tuple, list)):
+            codes = ",".join(str(item) for item in codes)
         symbols = [code.strip() for code in codes.split(",") if code.strip()]
         prices = load_history(symbols)
         sleeves = [

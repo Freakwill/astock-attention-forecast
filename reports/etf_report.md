@@ -183,7 +183,49 @@ upside.
    inflow data (RMB 638–722 mn/30d) says someone is buying. The rule stays out — that is the correct
    response to a −29 % 60-day trend even if a bounce follows.
 
-## 7. What would invalidate this
+## 7. How much information is there between yesterday and today?
+
+`aaf mi` estimates `I(x_{t-1}; y_t)` for all nine directed pairs with a kNN estimator (k = 10) and a
+200-shuffle null. Full table: [`mi_etf.md`](mi_etf.md). The null is not optional: on 206 observations
+a self-pair reads 0.055 bits raw while shuffling the same series already produces 0.015 bits, so most
+of an unadjusted MI is bias.
+
+**Directional returns: nothing.**
+
+| pair | n | Pearson | MI bits | shuffle mean | excess bits | p |
+|---|---|---|---|---|---|---|
+| 159142 → 159142 | 206 | −0.084 | 0.0554 | 0.0153 | +0.0401 | 0.100 |
+| 513100 → 159142 | 206 | −0.078 | 0.0484 | 0.0128 | +0.0356 | 0.075 |
+| 159142 → 513100 | 206 | −0.065 | 0.0373 | 0.0151 | +0.0221 | 0.154 |
+| 513100 → 513100 | 3212 | −0.071 | 0.0076 | 0.0039 | +0.0037 | 0.219 |
+| 512760 → 513100 | 1782 | −0.004 | 0.0000 | 0.0050 | −0.0050 | 1.000 |
+| 513100 → 512760 | 1782 | +0.001 | 0.0000 | 0.0058 | −0.0058 | 1.000 |
+
+The remaining rows have excess ≤ 0.008 bits and p ≥ 0.25. At k = 10 the shuffle null's 95th
+percentile is 0.022 bits for the 1782-day pairs and 0.016 bits for 513100's 3212 days, i.e. the test
+would have caught an effect equivalent to |r| ≈ 0.17. Nothing reaches it — every cross-asset pair sits
+at or below its own shuffle mean. **The Nasdaq → chip overnight hypothesis is the one worth naming, and
+it is zero** (0.0000 bits raw, −0.0058 excess, p = 1.000): 513100's close-to-close return already
+contains the US session, and the A-share chip ETF opens on it.
+
+**Magnitude: one nominal hit, no survivor.**
+
+| pair | n | Pearson | excess bits | p |
+|---|---|---|---|---|
+| 513100 → 513100 on \|r\| | 3212 | +0.245 | +0.0122 | 0.045 |
+| 512760 → 512760 on \|r\| | 1784 | +0.048 | −0.0044 | 0.498 |
+| 159142 → 159142 on \|r\| | 206 | +0.008 | −0.0132 | 1.000 |
+
+Volatility clustering is visible exactly where the ETF is most liquid and most macro-driven
+(Nasdaq-100: \|r\| autocorrelation +0.245, MI +0.0122 bits, p = 0.045). It does **not** survive a
+Bonferroni correction over the 18 tests (threshold 0.0028), and the two domestic ETFs show nothing.
+
+Read together with section 2 this is the quantitative form of the same statement: **there is no lag-1
+directional information in this basket, which is why a model built on these features cannot beat
+predicting zero.** The only dependence that exists is in the second moment, and a direction forecast
+cannot use it.
+
+## 8. What would invalidate this
 
 * Buy & hold's 19.46 % CAGR is dominated by a Nasdaq-100 ETF bought in 2013; a repeat requires the
   same US tech regime. The three-ETF basket is not diversified — all three are long-duration growth.
@@ -194,7 +236,7 @@ upside.
 * Costs are 3 bp/side. The trend sleeve turns over 14.6×/yr; at 10 bp/side its edge disappears
   entirely.
 
-## 8. Reproduce
+## 9. Reproduce
 
 ```bash
 source .venv/bin/activate
@@ -208,6 +250,7 @@ aaf forecast --run reports/runs/etf/transformer_<stamp> \
 aaf llm --config=config/llm_etf.yaml --symbols="159142,512760,513100" \
         --run=reports/runs/etf/transformer_<stamp> --out=reports/llm_overlay_etf.json
 aaf strategy --codes=159142,512760,513100 --out=reports/etf_strategy.md
+aaf mi --codes=159142,512760,513100 --permutations=200 --neighbors=10 --out=reports/mi_etf.md
 ```
 
 Generated artefacts: [`benchmark_etf.md`](benchmark_etf.md), [`forecast_etf.md`](forecast_etf.md),
