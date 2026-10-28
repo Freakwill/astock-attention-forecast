@@ -1,6 +1,6 @@
 # Lag-1 mutual information: I(x_{t-1}; y_t)
 
-Estimator: kNN (k=3) in nats, converted to bits. Null: 200 shuffles of the
+Estimator: kNN (k=10) in nats, converted to bits. Null: 200 shuffles of the
 target series, which keeps the marginals and destroys the dependence - so `shuffle mean`
 is what the bias alone produces and `excess bits` is the estimate that matters.
 
